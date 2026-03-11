@@ -73,7 +73,9 @@ def agent_node(state: GraphState) -> dict:
     tries a different expansion strategy.
     """
     query   = state.get("user_query", "")
+    print(f"--------------Original query: {query}")
     retries = state.get("rewrite_count", 0)
+    print(f"------------------Rewrite attempt: {retries}")
 
     retry_hint = (
         f"\n\nNote: This is rewrite attempt #{retries + 1}. "
@@ -110,6 +112,7 @@ def doc_check_node(state: GraphState) -> dict:
     docs = state.get("documents", [])
     present = bool(docs)
     logger.info("[doc_check_node] doc_present=%s  (%d docs)", present, len(docs))
+    print(f"Document check: {len(docs)} documents present → doc_present={present}")
     return {"doc_present": present}
 
 def _merge_results(
@@ -127,6 +130,7 @@ def _merge_results(
     doc_map: dict[str, Document] = {}
 
     for rank, doc in enumerate(bm25_docs):
+        print(f"BM25 doc {rank+1}: {safe_content(doc)[:100]}...-----------------------------------------------------------------------------")
         key = safe_content(doc)[:200]          # use content snippet as unique key
         scores[key]  = scores.get(key, 0.0) + bm25_weight * (1.0 / (rank + 1))
         doc_map[key] = doc
@@ -224,7 +228,8 @@ def hybrid_search_node(state: GraphState) -> dict:
         search_type="similarity",
         search_kwargs={"k": TOP_K},
     )
-    vector_results = _ensure_documents(vector_retriever.invoke(query))  
+    vector_results = _ensure_documents(vector_retriever.invoke(query))
+    print("vector results:")
     # ── Build BM25 retriever ──────────────────────────────────────────────────
     bm25_retriever = BM25Retriever.from_documents(docs)
     bm25_retriever.k = TOP_K

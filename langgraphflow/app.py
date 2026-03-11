@@ -127,12 +127,14 @@ if prompt := st.chat_input("Ask a question…"):
 
     # Show user message
     st.session_state.messages.append({"role": "user", "content": prompt})
+    print(f"User question -1 : {prompt}")
     with st.chat_message("user"):
         st.markdown(prompt)
 
     # Run pipeline
     with st.chat_message("assistant"):
         with st.spinner("Thinking…"):
+            print(f"Running pipeline for query: {prompt}")
             try:
                 result = run_pipeline(
                     user_query=prompt,

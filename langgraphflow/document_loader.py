@@ -37,9 +37,10 @@ def _unwrap(docs: list) -> list[Document]:
 
 def load_documents(file_paths: list[str]) -> list[Document]:
     all_docs: list[Document] = []
-
+    print(f"Loading documents from: {file_paths}")
     for path_str in file_paths:
         path = Path(path_str)
+        print(f"Processing file: {path}")
         if not path.exists():
             raise FileNotFoundError(f"File not found: {path_str}")
 
@@ -60,7 +61,7 @@ def load_documents(file_paths: list[str]) -> list[Document]:
             )
 
         raw = _unwrap(raw)   # ← unwrap tuples right after loading
-
+        print(f"Loaded {len(raw)} raw documents from {path.name}")
         for doc in raw:
             doc.metadata.setdefault("source", str(path))
 
@@ -73,4 +74,18 @@ def load_documents(file_paths: list[str]) -> list[Document]:
     )
 
     chunked = _unwrap(splitter.split_documents(all_docs))  # ← unwrap after splitting too
+    print(f"Split into {len(chunked)} chunks (chunk size={CHUNK_SIZE}, overlap={CHUNK_OVERLAP})")
     return chunked
+
+# if __name__ == "__main__":
+#     # Example usage
+#     from graph import build_graph
+
+#     workflow = build_graph()
+#     test_files =["C:\\Users\\sivan_7\\OneDrive\\Desktop\\rag\\Agentic-RAG\\requirements.txt",
+#                   "C:\\Users\\sivan_7\\OneDrive\\Desktop\\rag\\Agentic-RAG\\lamma.py"]
+#     initial_state = {
+#         "user_query": "What are the main points in these documents?",
+#         "documents": load_documents(test_files),
+#         "rewrite_count": 0
+#     }
