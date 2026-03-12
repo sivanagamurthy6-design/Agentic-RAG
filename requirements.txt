@@ -1,0 +1,17 @@
+streamlit 
+langchain
+langgraph
+langchain_groq
+langchain_community
+dotenv
+faiss-cpu
+langchain_huggingface
+langchain-text-splitters
+sentence_transformers
+pypdf 
+tavily-python
+docx2txt
+unstructured
+unstructured[pdf]
+rank_bm25
+pymupdf

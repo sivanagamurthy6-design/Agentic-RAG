@@ -1,0 +1,15 @@
+graph TD;
+    START --> agent[agent_node];
+    agent --> doc_check[doc_check_node];
+    doc_check -->|doc present| hybrid_search[hybrid_search_node];
+    hybrid_search --> validator[validator_node];
+    validator --> relevance_check{relevant?};
+    relevance_check -->|yes| END;
+    relevance_check -->|no| max_retry{max retries?};
+    max_retry -->|yes| agent;
+    max_retry -->|no| llm[llm_node];
+    doc_check -->|no doc| llm;
+    llm --> llm_check{llm ok?};
+    llm_check -->|yes| END;
+    llm_check -->|no| tavily[tavily_node];
+    tavily --> END;
