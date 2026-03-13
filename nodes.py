@@ -34,21 +34,26 @@ groq_api_key = get_groq_api_key()
 
 def llm_invoke(state: GraphState) -> str:
     user_query = state.get("user_query", "What is AI?")
-    file_paths = state.get("file_paths", [])
-    if file_paths:
+    file_paths = state.get("file_paths")
+    print(f"file psth in llm invoke : {file_paths}------------------")  # Debug: print file paths received in LLM node
+    if file_paths:  
         # set doc_flag to true if documents are present in the state
         state["doc_present"] = True
     else:
         state["doc_present"] = False
     doc_present_flag = state.get("doc_present")
+    print(f"Documents present flag in LLM node: {doc_present_flag} for user query: '{user_query}'")
     retrieved_docs = state.get("retrieved_docs", [])
+    print(f"LLM Invoke Node - User query: '{user_query}', Document present: {doc_present_flag}, retrieved doc true or false: {len(retrieved_docs)}")
     #rint(f"Invoking LLM with query: {user_query}")
     _llm = ChatGroq(
             model="llama-3.1-8b-instant",
             groq_api_key=groq_api_key)
-    if doc_present_flag:
-        #rint(f"Documents are present. Retrieved {len(retrieved_docs)} documents for the query.")
+    print(f"LLM initialized. Document present flag: {doc_present_flag}. Retrieved {len(retrieved_docs)} documents.")
+    if doc_present_flag and len(retrieved_docs) > 0:
+        print(f"Documents are present. Invoking LLM with retrieved documents for query: '{user_query}'")
         context = "\n\n".join([doc.page_content for doc in retrieved_docs])
+        print(f"Context for LLM:\n{context[:500]}...")  # Print the first 500 characters of the context for debugging
         messages = [
             SystemMessage(content="You are a helpful assistant. Use the following retrieved documents to answer the question."),
             HumanMessage(content=f"Question: {user_query}\n\nContext:\n{context}\n\nAnswer:")
@@ -170,7 +175,8 @@ def _ensure_documents(results: list) -> list[Document]:
     return clean
 
 #docs=load_documents(["C:\\Users\\sivan_7\\OneDrive\\Desktop\\rag\\Agentic-RAG\\langgraphflow\\MAHESH - CV.pdf"])
-def build_embeddings(state: GraphState) -> tuple[FAISS, BM25Retriever]:
+VECTOR_DB_PATH = "vector_DB"
+def build_embeddings(state: GraphState) -> dict:
     docs = state["documents"]
     if not docs:
        #print("No documents to build embeddings for.")
@@ -180,21 +186,21 @@ def build_embeddings(state: GraphState) -> tuple[FAISS, BM25Retriever]:
             }
     embeddings   = HuggingFaceEmbeddings(model="BAAI/bge-base-en-v1.5")
     vector_store     = FAISS.from_documents(docs, embeddings)
+    
+    os.makedirs(VECTOR_DB_PATH, exist_ok=True)
+    vector_store.save_local(VECTOR_DB_PATH)
+    print(f"FAISS index saved to: {VECTOR_DB_PATH}")
     vector_retriever = vector_store.as_retriever(
             search_type="similarity",
             search_kwargs={"k": TOP_K},
         )
-    bm25_retriever = BM25Retriever.from_documents(docs)
-    bm25_retriever.k = TOP_K
+    # bm25_retriever = BM25Retriever.from_documents(docs)
+    # bm25_retriever.k = TOP_K
     return {
-        "vector_retriever": vector_retriever,
-        "bm25_retriever": bm25_retriever
+        "vector_retriever": vector_retriever
+        #"bm25_retriever": bm25_retriever
             }
 #vector_retriever, bm25_retriever = build_embeddings(docs)
-
-
-
-
 #---------------------------------
 # here we need to do semantic search and BM25 search and then merge the results and return the final answer to the user.
 #user_query = "What is AI"
@@ -216,21 +222,51 @@ def safe_content(item) -> str:
 
 #def hybrid_search_node(state: GraphState, bm25_weight=BM25_WEIGHT, vector_weight=VECTOR_WEIGHT, QUESTION=user_query, top_k=TOP_K):
 def hybrid_search_node(state: GraphState) -> list[Document]:
-    user_query = state.get("user_query", "What is AI?")
-    vector_retriver = state.get("vector_retriever", None)
-    bm25_retriver = state.get("bm25_retriever", None)
-    #rint(f"Performing hybrid search for query: {user_query}22222")
-    top_k = state.get("top_k", 5)
-    # This is a placeholder for your merging logic.
-    # You could, for example, combine the results based on relevance scores,
-    # or simply concatenate them and remove duplicates.
-    vector_retriver=vector_retriver.invoke(user_query)
-    vector_results = _ensure_documents(vector_retriver)
-    bm25_retriver=bm25_retriver.invoke(user_query)
-    bm25_results = _ensure_documents(bm25_retriver)
-    #COMBINE THE RESULTS with conditions
-    combined_results = vector_results + bm25_results
-    # Remove duplicates while preserving order
+    embeddings   = HuggingFaceEmbeddings(model="BAAI/bge-base-en-v1.5")
+    user_query = state.get("user_query")
+
+
+    vector_store = FAISS.load_local(
+        VECTOR_DB_PATH,
+        embeddings,
+        allow_dangerous_deserialization=True
+    )
+
+    vector_retriever = vector_store.as_retriever(
+        search_kwargs={"k": TOP_K}
+    )
+
+    vector_results = vector_retriever.invoke(user_query)
+
+    bm25_retriever = state.get("bm25_retriever")
+    bm25_results = bm25_retriever.invoke(user_query) if bm25_retriever else []
+
+    docs = vector_results + bm25_results
+    combined_results = _ensure_documents(docs)
+    print(f"Vector search returned {len(vector_results)} results, BM25 search returned {len(bm25_results)} results, combined unique results: {len(combined_results)}")
+
+
+    #------------------------MERGE THE RESULTS------------------------------------------
+    # vector_retriver = state.get("vector_retriever", None)
+    # print(f"Performing hybrid search for query: {user_query}11111{vector_retriver}------------------")
+    # bm25_retriver = state.get("bm25_retriever", None)
+    # print(f"Performing hybrid search for query: {user_query}22222{bm25_retriver}------------------")
+    # top_k = state.get("top_k", 5)
+    # # This is a placeholder for your merging logic.
+    # # You could, for example, combine the results based on relevance scores,
+    # # or simply concatenate them and remove duplicates.
+    # # vector_retriver=vector_retriver.invoke(user_query)
+    # vector_results = vector_retriver.invoke(user_query) if vector_retriver else []
+    # bm25_results = bm25_retriver.invoke(user_query) if bm25_retriver else []
+    # print(f"Vector search returned {len(vector_results)} results, BM25 search returned {len(bm25_results)} results.")
+
+    #  #print(f"Vector search returned {len(vector_results)} results.")
+    # # vector_results = _ensure_documents(vector_retriver)
+    # # bm25_retriver=bm25_retriver.invoke(user_query)
+    # # bm25_results = _ensure_documents(bm25_retriver)
+    # #COMBINE THE RESULTS with conditions
+    # combined_results = vector_results + bm25_results
+    # # Remove duplicates while preserving order
     seen = set()
     unique_results = []
     for result in combined_results:
@@ -240,7 +276,7 @@ def hybrid_search_node(state: GraphState) -> list[Document]:
             unique_results.append(result)
     #rint(f"usere_query: {user_query}in hybrid_searech_node ")
     return {
-    "retrieved_docs": unique_results[:top_k]
+    "retrieved_docs": unique_results[:TOP_K]
         }
 
 #now we need to build tavily node
@@ -291,11 +327,10 @@ def tavily_node(state: GraphState) -> dict:
     # #rint(f"Invoking LLM to synthesise Tavily results for query: {query}")
     
     # response = _llm.invoke(messages)
-
+    # #print(f"Tavily search results for query '{query}': {context}")
     return {
         #"tavily_results": results,
         #"final_answer":   response.content,
             "final_answer": context,
             "source":         "tavily_search",
     }
-
